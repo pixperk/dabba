@@ -1,0 +1,19 @@
+# personal notes / roadmap — not part of the shipped repo
+notes/
+
+# build output
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+compile_commands.json
+.cache/
+
+# the alpine rootfs we untar into (never commit a distro)
+rootfs/
+
+# editor / os
+.vscode/
+.idea/
+.DS_Store
