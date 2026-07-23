@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <vector>
 #include "util.hpp"
+#include "child_stack.hpp"
 
 constexpr const char *kHostname = "dabba";
 
@@ -44,13 +45,13 @@ try
     // everything after "run" is the command to execute
     std::vector<std::string> cmd(argv + 2, argv + argc);
 
-    // stacks grow down, so clone gets the top. 16 byte aligned or aarch64 faults
-    alignas(16) static char stack[1024 * 1024];
+    // we create a stack for the child process to use. 
+    ChildStack stack;
 
     // SIGCHLD is not a namespace, it is the signal sent to us when the child dies
     int flags = CLONE_NEWUTS | SIGCHLD;
 
-    pid_t pid = checked(clone(child_fn, stack + sizeof(stack), flags, &cmd), "clone");
+    pid_t pid = checked(clone(child_fn, stack.top(), flags, &cmd), "clone");
 
     int status = 0;
     checked(waitpid(pid, &status, 0), "waitpid");
