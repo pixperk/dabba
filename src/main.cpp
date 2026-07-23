@@ -1,34 +1,46 @@
+#include <cstring>
 #include <iostream>
-#include <unistd.h>
 #include <string>
-#include <vector>
 #include <sys/wait.h>
+#include <unistd.h>
+#include <vector>
+#include "util.hpp"
 
-int main(int argc, char** argv) {
-   if (argc < 3 || std ::string(argv[1]) != "run") {
-      std::cerr << "usage: " << argv[0] << " run <command> [args...]" << std::endl;
-      return 1;
-   }
+constexpr const char* kHostname = "dabba";
 
-   //everything after "run" is the command to execute
-   std::vector<std::string> cmd(argv + 2, argv + argc);
+int main(int argc, char** argv) try{
+    if (argc < 3 || std::string(argv[1]) != "run") {
+        std::cerr << "usage: " << argv[0] << " run <command> [args...]\n";
+        return 1;
+    }
 
-   pid_t pid = fork();
+    // everything after "run" is the command to execute
+    std::vector<std::string> cmd(argv + 2, argv + argc);
+
+    pid_t pid = fork();
     if (pid == -1) { perror("fork"); return 1; }
 
-    if (pid == 0){
-        //child
-        sethostname("dabba", 5);
+    if (pid == 0) {
+        // throws EPERM without sudo instead of failing silently
+        checked(sethostname(kHostname, std::strlen(kHostname)), "sethostname");
 
-        std::vector<char*>cargv;
-        //execvp expects a null-terminated array of char*, so we need to convert the vector of strings to that format
-        for (auto &s : cmd) cargv.push_back(s.data());
+        // execvp wants a null terminated char*[], so point into cmd's strings
+        std::vector<char*> cargv;
+        for (auto& s : cmd) cargv.push_back(s.data());
         cargv.push_back(nullptr);
 
         execvp(cargv[0], cargv.data());
-        perror("execvp"); //reaches if execvp fails
+        perror("execvp");  // only reached if exec failed
         _exit(1);
     }
-    waitpid(pid, nullptr, 0); //wait for child to finish
-    return 0;
+
+int status = 0;
+checked(waitpid(pid, &status, 0), "waitpid");
+
+if (WIFEXITED(status))   return WEXITSTATUS(status);
+if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
+return 1;
+}catch(const std::exception &e){
+    std::cerr<<"dabba: "<<e.what()<<std::endl; 
+    return 1;
 }
