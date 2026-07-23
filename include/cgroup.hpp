@@ -1,4 +1,5 @@
 #pragma once
+#include "limits.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -38,4 +39,21 @@ class Cgroup{
             std::error_code ec;
             fs::remove(path_, ec);
         }
+}
+
+inline void apply_limits(const Cgroup &cg, const Limits &lim, int child_pid){
+     if (lim.memory_bytes)
+        cg.write("memory.max", std::to_string(lim.memory_bytes));
+
+    if (lim.cpu_percent)
+    {
+        // quota within a 100000us period. 50% -> "50000 100000"
+        int quota = lim.cpu_percent * 1000;
+        cg.write("cpu.max", std::to_string(quota) + " 100000");
+    }
+
+    if (lim.max_pids)
+        cg.write("pids.max", std::to_string(lim.max_pids));
+
+    cg.add_process(child_pid);
 }
