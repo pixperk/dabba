@@ -49,7 +49,9 @@ try
     ChildStack stack;
 
     // SIGCHLD is not a namespace, it is the signal sent to us when the child dies
-    int flags = CLONE_NEWUTS | SIGCHLD;
+       int flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWNS
+              | CLONE_NEWNET | CLONE_NEWIPC | SIGCHLD;
+
 
     pid_t pid = checked(clone(child_fn, stack.top(), flags, &cmd), "clone");
 
