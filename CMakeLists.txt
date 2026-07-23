@@ -18,7 +18,8 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 # only .cpp goes here. headers get pasted in by the preprocessor.
 # forgetting to add a new .cpp is the #1 cause of "undefined reference"
 add_executable(dabba
-    src/main.cpp)
+    src/main.cpp
+    src/fs_setup.cpp)
 
 # for #include "util.hpp". PRIVATE = don't propagate to linkers of this target
 target_include_directories(dabba PRIVATE include)

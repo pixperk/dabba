@@ -7,6 +7,16 @@
 #include <vector>
 #include "util.hpp"
 #include "child_stack.hpp"
+#include <filesystem>
+#include "fs_setup.hpp"
+
+constexpr const char *kRootfs = "/var/lib/dabba/rootfs";
+
+struct ChildArgs
+{
+    std::filesystem::path rootfs;
+    std::vector<std::string> cmd;
+};
 
 constexpr const char *kHostname = "dabba";
 
@@ -14,13 +24,16 @@ constexpr const char *kHostname = "dabba";
 static int child_fn(void *arg)
 try
 {
-    auto &cmd = *static_cast<std::vector<std::string> *>(arg);
+      auto &args = *static_cast<ChildArgs *>(arg);
 
     checked(sethostname(kHostname, std::strlen(kHostname)), "sethostname");
+    // setup the root filesystem for the child process
+    setup_rootfs(args.rootfs);
 
     std::vector<char *> cargv;
-    for (auto &s : cmd)
+    for (auto &s : args.cmd)
         cargv.push_back(s.data());
+
     cargv.push_back(nullptr);
 
     execvp(cargv[0], cargv.data());
@@ -52,8 +65,8 @@ try
        int flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWNS
               | CLONE_NEWNET | CLONE_NEWIPC | SIGCHLD;
 
-
-    pid_t pid = checked(clone(child_fn, stack.top(), flags, &cmd), "clone");
+    ChildArgs args{kRootfs, cmd};
+    pid_t pid = checked(clone(child_fn, stack.top(), flags, &args), "clone");
 
     int status = 0;
     checked(waitpid(pid, &status, 0), "waitpid");
