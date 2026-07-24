@@ -20,7 +20,6 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 add_executable(dabba
     src/main.cpp
     src/fs_setup.cpp
-    src/net_setup.cpp
     )
 
 # for #include "util.hpp". PRIVATE = don't propagate to linkers of this target

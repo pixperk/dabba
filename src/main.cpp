@@ -92,7 +92,7 @@ try
     // apply limits, THEN release the child. it is blocked on the pipe read
     // until this close, so it cannot fork before it is in the cgroup
     apply_limits(cg, lim, pid);
-    setup_network(pid);
+    Network net(pid);     
     close(pipefd[1]); // signal the child to continue
 
     int status = 0;
