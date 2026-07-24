@@ -28,4 +28,8 @@ void setup_rootfs(const fs::path &rootfs)
 
     // fresh procfs, mounted in our pid namespace this time
     checked(mount("proc", "/proc", "proc", 0, nullptr), "mount /proc");
+
+    // fresh devtmpfs, mounted in our new mount namespace
+    checked(mount("dev", "/dev", "devtmpfs", 0, nullptr), "mount /dev");
+
 }

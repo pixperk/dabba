@@ -39,7 +39,7 @@ class Cgroup{
             std::error_code ec;
             fs::remove(path_, ec);
         }
-}
+};
 
 inline void apply_limits(const Cgroup &cg, const Limits &lim, int child_pid){
      if (lim.memory_bytes)

@@ -9,6 +9,7 @@
 #include "child_stack.hpp"
 #include <filesystem>
 #include "fs_setup.hpp"
+#include "cgroup.hpp"
 
 constexpr const char *kRootfs = "/var/lib/dabba/rootfs";
 
@@ -16,6 +17,8 @@ struct ChildArgs
 {
     std::filesystem::path rootfs;
     std::vector<std::string> cmd;
+    int start_rd; //child blocks until parent applies limits
+    int start_wr; //child has to close its inherited write end of the pipe so parent can detect EOF
 };
 
 constexpr const char *kHostname = "dabba";
@@ -25,6 +28,12 @@ static int child_fn(void *arg)
 try
 {
       auto &args = *static_cast<ChildArgs *>(arg);
+
+      //wait unti the parent has put us in cgroup and applied limits
+      close(args.start_wr); //close the write end of the pipe so parent can detect EOF
+      char c;
+      read(args.start_rd, &c, 1); //block until parent closes the write end of the pipe
+      close(args.start_rd);
 
     checked(sethostname(kHostname, std::strlen(kHostname)), "sethostname");
     // setup the root filesystem for the child process
@@ -58,15 +67,29 @@ try
     // everything after "run" is the command to execute
     std::vector<std::string> cmd(argv + 2, argv + argc);
 
-    // we create a stack for the child process to use. 
+    // create the cgroup before clone so it outlives the child and rmdirs on scope exit
+    Cgroup cg("dabba");
+    Limits lim;
+    lim.max_pids = 20;
+
     ChildStack stack;
 
     // SIGCHLD is not a namespace, it is the signal sent to us when the child dies
-       int flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWNS
+    int flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWNS
               | CLONE_NEWNET | CLONE_NEWIPC | SIGCHLD;
 
-    ChildArgs args{kRootfs, cmd};
+    int pipefd[2];
+    checked(pipe(pipefd), "pipe");
+
+    ChildArgs args{kRootfs, cmd, pipefd[0], pipefd[1]};
     pid_t pid = checked(clone(child_fn, stack.top(), flags, &args), "clone");
+
+    close(pipefd[0]); // child has the read end, we only write
+
+    // apply limits, THEN release the child. it is blocked on the pipe read
+    // until this close, so it cannot fork before it is in the cgroup
+    apply_limits(cg, lim, pid);
+    close(pipefd[1]); // signal the child to continue
 
     int status = 0;
     checked(waitpid(pid, &status, 0), "waitpid");
