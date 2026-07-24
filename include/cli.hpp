@@ -2,6 +2,7 @@
 
 #include "limits.hpp"
 #include <string>
+#include <variant>
 #include <vector>
 
 struct RunCmd{
@@ -12,4 +13,14 @@ struct RunCmd{
 
 };
 
-RunCmd parse_run_cmd(int argc, char **argv);
+struct PsCmd{};
+
+struct ExecCmd{
+    std::string id;
+    std::vector<std::string> argv;
+};
+
+//command can be one of run, ps, exec
+using Command = std::variant<RunCmd, PsCmd, ExecCmd>;
+
+Command parse_args(int argc, char **argv);

@@ -1,52 +1,51 @@
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
+#include <optional>
 #include <sched.h>
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <variant>
 #include <vector>
-#include "util.hpp"
-#include "child_stack.hpp"
-#include <filesystem>
-#include "fs_setup.hpp"
-#include "cgroup.hpp"
-#include "net_setup.hpp"
-#include "cli.hpp"
-#include <optional>
-#include "id.hpp"
 
-constexpr const char *kRootfs = "/var/lib/dabba/rootfs";
+#include "cgroup.hpp"
+#include "child_stack.hpp"
+#include "cli.hpp"
+#include "fs_setup.hpp"
+#include "id.hpp"
+#include "net_setup.hpp"
+#include "state.hpp"
+#include "subprocess.hpp"
+#include "util.hpp"
 
 struct ChildArgs
 {
     std::filesystem::path rootfs;
     std::vector<std::string> cmd;
-    int start_rd; //child blocks until parent applies limits
-    int start_wr; //child has to close its inherited write end of the pipe so parent can detect EOF
+    int start_rd;
+    int start_wr;
 };
 
 constexpr const char *kHostname = "dabba";
 
-// this runs inside the child inside whatever namespace clone gave it
 static int child_fn(void *arg)
 try
 {
-      auto &args = *static_cast<ChildArgs *>(arg);
+    auto &args = *static_cast<ChildArgs *>(arg);
 
-      //wait unti the parent has put us in cgroup and applied limits
-      close(args.start_wr); //close the write end of the pipe so parent can detect EOF
-      char c;
-      read(args.start_rd, &c, 1); //block until parent closes the write end of the pipe
-      close(args.start_rd);
+    close(args.start_wr);
+    char c;
+    read(args.start_rd, &c, 1);
+    close(args.start_rd);
 
     checked(sethostname(kHostname, std::strlen(kHostname)), "sethostname");
-    // setup the root filesystem for the child process
     setup_rootfs(args.rootfs);
 
     std::vector<char *> cargv;
     for (auto &s : args.cmd)
         cargv.push_back(s.data());
-
     cargv.push_back(nullptr);
 
     execvp(cargv[0], cargv.data());
@@ -59,26 +58,14 @@ catch (const std::exception &e)
     return 1;
 }
 
-int main(int argc, char **argv)
-try
+static int do_run(const RunCmd &rc)
 {
-    if (argc < 3 || std::string(argv[1]) != "run")
-    {
-        std::cerr << "usage: " << argv[0]
-                  << " run [--memory N] [--cpu N] [--pids N] [--rootfs PATH] [--net] <cmd> [args...]\n";
-        return 1;
-    }
-
-    RunCmd rc = parse_run_cmd(argc, argv);
-
     uint16_t id = make_id();
+    std::string idh = id_hex(id);
 
-    // create the cgroup before clone so it outlives the child and rmdirs on scope exit
-    Cgroup cg("dabba=" + id_hex(id));
-
+    Cgroup cg("dabba-" + idh);
     ChildStack stack;
 
-    // SIGCHLD is not a namespace, it is the signal sent to us when the child dies
     int flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWNS
               | CLONE_NEWNET | CLONE_NEWIPC | SIGCHLD;
 
@@ -88,19 +75,18 @@ try
     ChildArgs args{rc.rootfs, rc.argv, pipefd[0], pipefd[1]};
     pid_t pid = checked(clone(child_fn, stack.top(), flags, &args), "clone");
 
-    close(pipefd[0]); // child has the read end, we only write
+    close(pipefd[0]);
 
-    // apply limits, THEN release the child. it is blocked on the pipe read
-    // until this close, so it cannot fork before it is in the cgroup
     apply_limits(cg, rc.limits, pid);
-    
-    //networking is conditional on the --net flag
-    std::optional<Network>net;
-    if(rc.network){
-        net.emplace(pid, id);
-    }
 
-    close(pipefd[1]); // signal the child to continue
+    std::optional<Network> net;
+    if (rc.network)
+        net.emplace(pid, id);
+
+    // record this container so ps/exec can find it. removed on scope exit.
+    StateFile state(idh, pid, rc.argv.empty() ? "" : rc.argv[0]);
+
+    close(pipefd[1]);
 
     int status = 0;
     checked(waitpid(pid, &status, 0), "waitpid");
@@ -111,8 +97,44 @@ try
         return 128 + WTERMSIG(status);
     return 1;
 }
+
+static int do_ps(const PsCmd &)
+{
+    std::printf("%-8s %-8s %s\n", "ID", "PID", "COMMAND");
+    for (const auto &s : list_states())
+        std::printf("%-8s %-8d %s\n", s.id.c_str(), s.pid, s.cmd.c_str());
+    return 0;
+}
+
+static int do_exec(const ExecCmd &e)
+{
+    ContainerInfo info = read_state(std::filesystem::path("/run/dabba") / e.id);
+    if (info.pid == 0)
+        throw std::runtime_error("no such container: " + e.id);
+
+    // enter all of the container's namespaces, then run the command inside
+    std::vector<std::string> cmd = {"nsenter", "-t", std::to_string(info.pid), "-a"};
+    for (const auto &a : e.argv)
+        cmd.push_back(a);
+
+    run_cmd(cmd);
+    return 0;
+}
+
+int main(int argc, char **argv)
+try
+{
+    Command cmd = parse_args(argc, argv);
+    return std::visit([](auto &&c) -> int
+    {
+        using T = std::decay_t<decltype(c)>;
+        if constexpr (std::is_same_v<T, RunCmd>)       return do_run(c);
+        else if constexpr (std::is_same_v<T, PsCmd>)   return do_ps(c);
+        else if constexpr (std::is_same_v<T, ExecCmd>) return do_exec(c);
+    }, cmd);
+}
 catch (const std::exception &e)
 {
-    std::cerr << "dabba: " << e.what() << std::endl;
+    std::cerr << "dabba: " << e.what() << "\n";
     return 1;
 }

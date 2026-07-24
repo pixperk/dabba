@@ -30,7 +30,8 @@ static const char *value_for(const std::string &flag, int &i, int argc, char **a
     return argv[i];
 }
 
-RunCmd parse_run_cmd(int argc, char **argv)
+//static as this is only used in this file
+static RunCmd parse_run_cmd(int argc, char **argv)
 {
     // argv[0] = dabba, argv[1] = run, flags and command start at 2
     RunCmd r;
@@ -52,4 +53,24 @@ RunCmd parse_run_cmd(int argc, char **argv)
         throw std::runtime_error("no command given");
 
     return r;
+}
+
+static ExecCmd parse_exec_cmd(int argc, char **argv){
+    if (argc < 4)
+        throw std::runtime_error("usage: dabba exec <id> <cmd> [args...]");
+    ExecCmd e;
+    e.id = argv[2];
+    e.argv.assign(argv + 3, argv + argc);
+    return e;
+}
+
+Command parse_args(int argc, char **argv)
+{
+    if (argc < 2)
+        throw std::runtime_error("usage: dabba <run|ps|exec> ...");
+    std::string sub = argv[1];
+    if (sub == "run")  return parse_run_cmd(argc, argv);
+    if (sub == "ps")   return PsCmd{};
+    if (sub == "exec") return parse_exec_cmd(argc, argv);
+    throw std::runtime_error("unknown command: " + sub);
 }
