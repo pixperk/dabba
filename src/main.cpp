@@ -13,6 +13,7 @@
 #include "net_setup.hpp"
 #include "cli.hpp"
 #include <optional>
+#include "id.hpp"
 
 constexpr const char *kRootfs = "/var/lib/dabba/rootfs";
 
@@ -70,8 +71,10 @@ try
 
     RunCmd rc = parse_run_cmd(argc, argv);
 
+    uint16_t id = make_id();
+
     // create the cgroup before clone so it outlives the child and rmdirs on scope exit
-    Cgroup cg("dabba");
+    Cgroup cg("dabba=" + id_hex(id));
 
     ChildStack stack;
 
@@ -94,7 +97,7 @@ try
     //networking is conditional on the --net flag
     std::optional<Network>net;
     if(rc.network){
-        net.emplace(pid);
+        net.emplace(pid, id);
     }
 
     close(pipefd[1]); // signal the child to continue
