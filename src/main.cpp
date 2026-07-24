@@ -11,6 +11,8 @@
 #include "fs_setup.hpp"
 #include "cgroup.hpp"
 #include "net_setup.hpp"
+#include "cli.hpp"
+#include <optional>
 
 constexpr const char *kRootfs = "/var/lib/dabba/rootfs";
 
@@ -61,19 +63,15 @@ try
 {
     if (argc < 3 || std::string(argv[1]) != "run")
     {
-        std::cerr << "usage: " << argv[0] << " run <command> [args...]\n";
+        std::cerr << "usage: " << argv[0]
+                  << " run [--memory N] [--cpu N] [--pids N] [--rootfs PATH] [--net] <cmd> [args...]\n";
         return 1;
     }
 
-    // everything after "run" is the command to execute
-    std::vector<std::string> cmd(argv + 2, argv + argc);
+    RunCmd rc = parse_run_cmd(argc, argv);
 
     // create the cgroup before clone so it outlives the child and rmdirs on scope exit
     Cgroup cg("dabba");
-    Limits lim;
-    lim.max_pids = 20;
-    lim.memory_bytes = 50LL * 1024 * 1024; // 50 MB
-    lim.cpu_percent = 20;                  // 20% of one core
 
     ChildStack stack;
 
@@ -84,15 +82,21 @@ try
     int pipefd[2];
     checked(pipe(pipefd), "pipe");
 
-    ChildArgs args{kRootfs, cmd, pipefd[0], pipefd[1]};
+    ChildArgs args{rc.rootfs, rc.argv, pipefd[0], pipefd[1]};
     pid_t pid = checked(clone(child_fn, stack.top(), flags, &args), "clone");
 
     close(pipefd[0]); // child has the read end, we only write
 
     // apply limits, THEN release the child. it is blocked on the pipe read
     // until this close, so it cannot fork before it is in the cgroup
-    apply_limits(cg, lim, pid);
-    Network net(pid);     
+    apply_limits(cg, rc.limits, pid);
+    
+    //networking is conditional on the --net flag
+    std::optional<Network>net;
+    if(rc.network){
+        net.emplace(pid);
+    }
+
     close(pipefd[1]); // signal the child to continue
 
     int status = 0;
