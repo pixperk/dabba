@@ -71,6 +71,8 @@ try
     Cgroup cg("dabba");
     Limits lim;
     lim.max_pids = 20;
+    lim.memory_bytes = 50LL * 1024 * 1024; // 50 MB
+    lim.cpu_percent = 20;                  // 20% of one core
 
     ChildStack stack;
 
