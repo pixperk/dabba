@@ -1,3 +1,4 @@
+#include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -121,6 +122,19 @@ static int do_exec(const ExecCmd &e)
     return 0;
 }
 
+static int do_kill(const KillCmd &k)
+{
+    ContainerInfo info = read_state(std::filesystem::path("/run/dabba") / k.id);
+    if (info.pid == 0)
+        throw std::runtime_error("no such container: " + k.id);
+
+    // SIGKILL the container's init. killing pid 1 of the namespace tears down
+    // the whole namespace, so every process inside dies. SIGKILL because a
+    // namespace init ignores signals it has no handler for, but never SIGKILL.
+    checked(::kill(info.pid, SIGKILL), "kill");
+    return 0;
+}
+
 int main(int argc, char **argv)
 try
 {
@@ -131,6 +145,7 @@ try
         if constexpr (std::is_same_v<T, RunCmd>)       return do_run(c);
         else if constexpr (std::is_same_v<T, PsCmd>)   return do_ps(c);
         else if constexpr (std::is_same_v<T, ExecCmd>) return do_exec(c);
+        else if constexpr (std::is_same_v<T, KillCmd>) return do_kill(c);
     }, cmd);
 }
 catch (const std::exception &e)

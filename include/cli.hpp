@@ -20,7 +20,11 @@ struct ExecCmd{
     std::vector<std::string> argv;
 };
 
-//command can be one of run, ps, exec
-using Command = std::variant<RunCmd, PsCmd, ExecCmd>;
+struct KillCmd{
+    std::string id;
+};
+
+//command can be one of run, ps, exec, kill
+using Command = std::variant<RunCmd, PsCmd, ExecCmd, KillCmd>;
 
 Command parse_args(int argc, char **argv);

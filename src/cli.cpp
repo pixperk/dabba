@@ -64,6 +64,14 @@ static ExecCmd parse_exec_cmd(int argc, char **argv){
     return e;
 }
 
+static KillCmd parse_kill_cmd(int argc, char **argv){
+    if (argc < 3)
+        throw std::runtime_error("usage: dabba kill <id>");
+    KillCmd k;
+    k.id = argv[2];
+    return k;
+}
+
 Command parse_args(int argc, char **argv)
 {
     if (argc < 2)
@@ -72,5 +80,6 @@ Command parse_args(int argc, char **argv)
     if (sub == "run")  return parse_run_cmd(argc, argv);
     if (sub == "ps")   return PsCmd{};
     if (sub == "exec") return parse_exec_cmd(argc, argv);
+    if (sub == "kill") return parse_kill_cmd(argc, argv);
     throw std::runtime_error("unknown command: " + sub);
 }
