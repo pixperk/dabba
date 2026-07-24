@@ -1,5 +1,6 @@
 #pragma once
 
+#include <csignal>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -63,12 +64,26 @@ inline ContainerInfo read_state(const fs::path &p)
     return info;
 }
 
-//reads state files from /run/dabba and returns a vector of ContainerInfo
+// is this pid actually alive? signal 0 sends nothing, it just probes.
+inline bool pid_alive(int pid)
+{
+    return pid > 0 && ::kill(pid, 0) == 0;
+}
+
+// reads state files from /run/dabba, dropping (and reaping) dead ones.
+// a container killed by a signal skips its StateFile dtor, so we can't
+// trust the file to be gone. we verify liveness here instead.
 inline std::vector<ContainerInfo> list_states()
 {
     std::vector<ContainerInfo> out;
     std::error_code ec;
     for (const auto &entry : fs::directory_iterator("/run/dabba", ec))
-        out.push_back(read_state(entry.path()));
+    {
+        ContainerInfo info = read_state(entry.path());
+        if (pid_alive(info.pid))
+            out.push_back(info);
+        else
+            fs::remove(entry.path(), ec);   // reap the tombstone
+    }
     return out;
 }
