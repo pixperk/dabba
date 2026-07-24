@@ -22,11 +22,11 @@ class Cgroup{
         Cgroup(const Cgroup &) = delete;
         Cgroup &operator=(const Cgroup &) = delete;
 
-    void write(const std::string &file, const std::string& value)const {
+    void write(const std::string &file, const std::string &value) const {
         std::ofstream f(path_ / file);
         f << value;
         if (!f) {
-            throw std::system_error(errno, std::generic_category(), "file");
+            throw std::system_error(errno, std::generic_category(), "cgroup write " + file);
         }
     }
 
@@ -48,7 +48,7 @@ inline void apply_limits(const Cgroup &cg, const Limits &lim, int child_pid){
     if (lim.cpu_percent)
     {
         // quota within a 100000us period. 50% -> "50000 100000"
-        int quota = lim.cpu_percent * 1000;
+        const int quota = lim.cpu_percent * 1000;
         cg.write("cpu.max", std::to_string(quota) + " 100000");
     }
 

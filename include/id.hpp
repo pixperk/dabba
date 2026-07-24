@@ -7,7 +7,7 @@
 
 inline uint16_t make_id(){
     std::random_device rd;
-    return static_cast<uint16_t>(rd() & 0xffff); //padded to 16 bits
+    return static_cast<uint16_t>(rd() & 0xffff); //masked to 16 bits
 }
 
 // 0x3f9a -> "3f9a", zero-padded to 4 chars

@@ -8,7 +8,7 @@ static long long parse_size(const std::string &s)
     if (s.empty())
         throw std::runtime_error("empty size");
 
-    char suffix = s.back();
+    const char suffix = s.back();
     long long mult = 1;
     std::string num = s;
 
@@ -75,7 +75,7 @@ static KillCmd parse_kill_cmd(int argc, char **argv){
 Command parse_args(int argc, char **argv)
 {
     if (argc < 2)
-        throw std::runtime_error("usage: dabba <run|ps|exec> ...");
+        throw std::runtime_error("usage: dabba <run|ps|exec|kill> ...");
     std::string sub = argv[1];
     if (sub == "run")  return parse_run_cmd(argc, argv);
     if (sub == "ps")   return PsCmd{};

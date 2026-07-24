@@ -61,14 +61,14 @@ catch (const std::exception &e)
 
 static int do_run(const RunCmd &rc)
 {
-    uint16_t id = make_id();
-    std::string idh = id_hex(id);
+    const uint16_t id = make_id();
+    const std::string idh = id_hex(id);
 
     Cgroup cg("dabba-" + idh);
     ChildStack stack;
 
-    int flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWNS
-              | CLONE_NEWNET | CLONE_NEWIPC | SIGCHLD;
+    const int flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWNS
+                    | CLONE_NEWNET | CLONE_NEWIPC | SIGCHLD;
 
     int pipefd[2];
     checked(pipe(pipefd), "pipe");
